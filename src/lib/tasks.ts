@@ -65,7 +65,7 @@ export function isOverdue(task: Task) {
 
 export function formatDue(dueDate: string) {
   if (!dueDate) return "Sin fecha";
-  const [y, m, d] = dueDate.split("-");
+  const [y = "", m = "", d = ""] = dueDate.split("-");
   return `${d}/${m}/${y.slice(2)}`;
 }
 
