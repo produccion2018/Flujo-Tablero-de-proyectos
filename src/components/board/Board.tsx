@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trello } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Column } from "./Column";
@@ -62,6 +62,64 @@ export function Board() {
     else createTask(draft);
   };
 
+  /* ───────── Recorrido automático (?tour=1, lo usa el portfolio) ─────────
+     Mueve tarjetas entre columnas, filtra por prioridad y cambia el tema.
+     Si el usuario hace clic o scroll se pausa y retoma tras unos segundos. */
+  const [touring, setTouring] = useState(false);
+  const tourState = useRef({ tasks, moved: [] as { id: string; from: ColumnId }[] });
+  tourState.current.tasks = tasks;
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("tour")) return;
+    setTouring(true);
+    const flash = (id: string) => {
+      setDroppedId(id);
+      window.setTimeout(() => setDroppedId(null), 600);
+    };
+    const move = (from: ColumnId, to: ColumnId) => {
+      const t = tourState.current.tasks.find((x) => x.status === from);
+      if (!t) return;
+      tourState.current.moved.push({ id: t.id, from });
+      moveTask(t.id, to);
+      flash(t.id);
+    };
+    const restore = () => {
+      tourState.current.moved.reverse().forEach(({ id, from }) => moveTask(id, from));
+      tourState.current.moved = [];
+    };
+    const steps = [
+      () => move("todo", "doing"),
+      () => move("doing", "done"),
+      () => setPriority("alta"),
+      () => setPriority("all"),
+      () => toggle(),
+      () => move("todo", "doing"),
+      () => toggle(),
+      () => restore(),
+    ];
+    let i = 0;
+    let paused = false;
+    let idle = 0;
+    const onUser = () => {
+      paused = true;
+      window.clearTimeout(idle);
+      idle = window.setTimeout(() => (paused = false), 9000);
+    };
+    const evs = ["wheel", "touchstart", "mousedown", "keydown"] as const;
+    evs.forEach((e) => window.addEventListener(e, onUser, { passive: true }));
+    const id = window.setInterval(() => {
+      if (paused) return;
+      steps[i % steps.length]?.();
+      i++;
+    }, 2600);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(idle);
+      evs.forEach((e) => window.removeEventListener(e, onUser));
+      restore();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleDrop = (columnId: ColumnId) => {
     if (!dragging) return;
     if (dragging.status !== columnId) {
@@ -74,6 +132,12 @@ export function Board() {
 
   return (
     <div className="min-h-screen bg-background">
+      {touring && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full border border-accent/40 bg-card/90 px-4 py-2 text-xs text-muted-foreground shadow-card backdrop-blur">
+          <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-accent align-middle" />
+          Recorrido automático · tocá para explorar
+        </div>
+      )}
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
           <div className="flex min-w-0 items-center gap-3">
